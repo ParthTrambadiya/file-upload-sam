@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SAM Template for file-upload
+
+Parameters:
+  StackStage:
+    Type: String
+    Default: dev
+    Description: Enter dev, test, or prod accroding to your stack, 'dev' is default.
+  FileBucketName:
+    Type: String
+    Description: Enter your file bucket name and it should be unique across world.
+
+Mappings:
+  Environment:
+    StackStageCaseChange:
+      DEV: dev
+      TEST: test
+      PROD: prod
+      Dev: dev
+      Test: test
+      Prod: prod
+      dev: dev
+      test: test
+      prod: prod
+
+Globals:
+  Function:
+    Timeout: 120
+
+Resources:
+  FileBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 
+        !Join 
+          - ''
+          - - !Ref FileBucketName
+            - '-'
+            - !FindInMap [Environment, StackStageCaseChange, !Ref StackStage]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+
+  TestFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      FunctionName: 
+        !Join 
+          - ''
+          - - !Ref AWS::StackName
+            - "-function-"
+            - !FindInMap [Environment, StackStageCaseChange, !Ref StackStage]
+      CodeUri: functions/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref FileBucket
+      Policies:
+        - S3WritePolicy:
+            BucketName:
+              !Ref FileBucket
+
+      Events:
+        FileUpload:
+          Type: Api 
+          Properties:
+            Path: /upload
+            Method: post
+            RestApiId: 
+              Ref: FileUploadRestApi
+
+  FileUploadRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: 
+        !Join
+          - ''
+          - -  !Ref AWS::StackName
+            - "-api-"
+            - !FindInMap [Environment, StackStageCaseChange, !Ref StackStage]
+      StageName: !FindInMap [Environment, StackStageCaseChange, !Ref StackStage]
+      EndpointConfiguration:
+        Type: EDGE
+      Description: This is public front rest api for file-upload stack.
+      Auth:
+        DefaultAuthorizer: NONE
+      Cors:
+        AllowMethods: "'POST'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+      BinaryMediaTypes:
+        - '*/*'
+
+Outputs:
+  FileUploadApi:
+    Description: "API Gateway endpoint URL of File-upload api"
+    Value: 
+      !Join
+        - ''
+        - - 'https://'
+          - !Ref FileUploadRestApi
+          - '.execute-api.'
+          - !Ref AWS::Region
+          - '.amazonaws.com/'
+          - !FindInMap [Environment, StackStageCaseChange, !Ref StackStage]
+          - '/upload'
